@@ -700,6 +700,13 @@ Gets the element of the provided array with index `n` where `n` can be any integ
 If the index falls outside of the bounds of an array, it returns a default value (0 for numbers, an empty string for strings, etc.),
 except for arguments of a non-constant array and a constant index 0. In this case there will be an error `Array indices are 1-based`.
 
+When `n` is an array of integers, returns an array of the elements at the specified positions (a gather operation).
+This is equivalent to `arrayMap(i -> arr[i], n)`, but has a separate, more efficient implementation.
+Out-of-bounds positions produce the default value, the same as for a scalar index.
+The index elements may be nullable. A `NULL` index produces `NULL` (and makes the result element type nullable) when the element type can be
+wrapped in `Nullable`; for element types that cannot be inside `Nullable` (such as `Array`, `Map`), a `NULL` index produces the
+default value instead. This is the same behavior as for a scalar `NULL` index.
+
 <Note>
 Arrays in ClickHouse are one-indexed.
 </Note>
@@ -717,11 +724,11 @@ arrayElement(arr, n)
 
 **Arguments**
 
-- `arr` — The array to search. [`Array(T)`](/reference/data-types/array). - `n` — Position of the element to get. [`(U)Int*`](/reference/data-types/int-uint). 
+- `arr` — The array to search. [`Array(T)`](/reference/data-types/array). - `n` — Position of the element to get, or an array of positions. The positions may be nullable. [`(U)Int*`](/reference/data-types/int-uint) or [`Array((U)Int*)`](/reference/data-types/array). 
 
 **Returned value**
 
-Returns a single combined array from the provided array arguments [`Array(T)`](/reference/data-types/array)
+When `n` is a scalar, returns the element of type `T`. When `n` is an array, returns `Array(Nullable(T))` if the index elements are nullable and `T` can be wrapped in `Nullable`, otherwise `Array(T)`. [`Any`](/reference/data-types/index) or [`Array(T)`](/reference/data-types/array) or [`Array(Nullable(T))`](/reference/data-types/array)
 
 **Examples**
 
@@ -765,12 +772,28 @@ SELECT arrayElement(arr, 4) FROM (SELECT [1, 2, 3] AS arr)
 0
 ```
 
+**Array of indices**
+
+```sql title=Query
+SELECT [10, 20, 30, 40][[2, 4, 1]]
+```
+
+```response title=Response
+[20,40,10]
+```
+
 ## arrayElementOrNull {#arrayElementOrNull}
 
 Introduced in: v1.1.0
 
 Gets the element of the provided array with index `n` where `n` can be any integer type.
-If the index falls outside of the bounds of an array, `NULL` is returned instead of a default value.
+If the index falls outside of the bounds of an array, `NULL` is returned instead of a default value,
+as long as the result type can be nullable. For element types that are not already nullable and cannot be
+put inside `Nullable` (such as `Array`, `Map`), the default value of the element type is returned instead.
+
+When `n` is an array of integers, returns an array of the elements at the specified positions.
+This is equivalent to `arrayMap(i -> arrayElementOrNull(arr, i), n)`, but has a separate, more efficient implementation.
+Out-of-bounds positions and `NULL` indexes produce `NULL` values in the result array, following the same rule as for a scalar index.
 
 <Note>
 Arrays in ClickHouse are one-indexed.
@@ -781,16 +804,16 @@ Negative indexes are supported. In this case, it selects the corresponding eleme
 **Syntax**
 
 ```sql
-arrayElementOrNull(arrays)
+arrayElementOrNull(arr, n)
 ```
 
 **Arguments**
 
-- `arrays` — Arbitrary number of array arguments. [`Array`](/reference/data-types/array)
+- `arr` — The array to search. [`Array(T)`](/reference/data-types/array). - `n` — Position of the element to get, or an array of positions. The positions may be nullable. [`(U)Int*`](/reference/data-types/int-uint) or [`Array((U)Int*)`](/reference/data-types/array). 
 
 **Returned value**
 
-Returns a single combined array from the provided array arguments. [`Array(T)`](/reference/data-types/array)
+When `n` is a scalar, returns `Nullable(T)` if `T` can be wrapped in `Nullable`, otherwise `T`. When `n` is an array, returns `Array(Nullable(T))` if `T` can be wrapped in `Nullable`, otherwise `Array(T)`. [`Any`](/reference/data-types/index) or [`Nullable(T)`](/reference/data-types/nullable) or [`Array(T)`](/reference/data-types/array) or [`Array(Nullable(T))`](/reference/data-types/array)
 
 **Examples**
 
@@ -822,6 +845,16 @@ SELECT arrayElementOrNull(arr, 4) FROM (SELECT [1, 2, 3] AS arr)
 
 ```response title=Response
 NULL
+```
+
+**Array of indices**
+
+```sql title=Query
+SELECT arrayElementOrNull([10, 20, 30], [1, 5, 2])
+```
+
+```response title=Response
+[10,NULL,20]
 ```
 
 ## arrayEnumerate {#arrayEnumerate}
